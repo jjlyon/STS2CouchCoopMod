@@ -7,15 +7,15 @@ public class HttpServer
 {
     private HttpListener _listener = new();
     private readonly int _port;
-    private readonly WebSocketHandler _wsHandler = new();
+    private readonly WebSocketHandler _wsHandler;
+    private readonly GameStateProxy _proxy = new();
     private CancellationTokenSource? _cts;
 
     public HttpServer(int port = 8080)
     {
         _port = port;
+        _wsHandler = new WebSocketHandler(HandleAction);
     }
-
-    public WebSocketHandler WebSocketHandler => _wsHandler;
 
     public void Start()
     {
@@ -35,6 +35,7 @@ public class HttpServer
         }
         MainFile.Logger.Log($"HTTP server listening on port {_port}");
         Task.Run(() => ListenLoop(_cts.Token));
+        Task.Run(() => PollStateLoop(_cts.Token));
     }
 
     public void Stop()
@@ -43,6 +44,42 @@ public class HttpServer
         _wsHandler.CloseAll();
         _listener.Stop();
         _listener.Close();
+    }
+
+    private async Task HandleAction(string actionJson)
+    {
+        var (success, response) = await _proxy.ExecuteActionAsync(actionJson);
+        if (!success)
+            MainFile.Logger.Log($"Action failed: {response}");
+
+        await Task.Delay(150);
+        var state = await _proxy.GetStateAsync();
+        if (state != null)
+            await _wsHandler.BroadcastAsync(state);
+    }
+
+    private async Task PollStateLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(500, ct);
+                if (_wsHandler.ClientCount == 0) continue;
+
+                var (state, changed) = await _proxy.PollAsync();
+                if (changed && state != null)
+                    await _wsHandler.BroadcastAsync(state);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                MainFile.Logger.Log($"Poll error: {ex.Message}");
+            }
+        }
     }
 
     private async Task ListenLoop(CancellationToken ct)
@@ -70,6 +107,10 @@ public class HttpServer
         if (context.Request.IsWebSocketRequest)
         {
             await _wsHandler.AcceptConnection(context, ct);
+
+            var state = await _proxy.GetStateAsync();
+            if (state != null)
+                await _wsHandler.SendToLatestAsync(state);
             return;
         }
 

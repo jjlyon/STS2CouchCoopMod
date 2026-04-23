@@ -2,18 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <title>Couch Co-op</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="app">
-        <h1>Couch Co-op</h1>
-        <div id="status">Connecting...</div>
-        <div id="messages"></div>
-        <div class="input-row">
-            <input type="text" id="input" placeholder="Send a message...">
-            <button id="send">Send</button>
+        <div id="connecting">
+            <h1>Couch Co-op</h1>
+            <p>Connecting...</p>
+        </div>
+        <div id="game" style="display:none">
+            <header id="status-bar"></header>
+            <main id="content"></main>
+            <footer id="action-bar"></footer>
         </div>
     </div>
     <script src="app.js"></script>

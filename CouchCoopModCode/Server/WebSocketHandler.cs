@@ -8,6 +8,13 @@ namespace CouchCoopMod.CouchCoopModCode.Server;
 public class WebSocketHandler
 {
     private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
+    private readonly Func<string, Task> _onAction;
+    private string? _latestClientId;
+
+    public WebSocketHandler(Func<string, Task> onAction)
+    {
+        _onAction = onAction;
+    }
 
     public int ClientCount => _clients.Count;
 
@@ -17,6 +24,7 @@ public class WebSocketHandler
         var ws = wsContext.WebSocket;
         var clientId = Guid.NewGuid().ToString("N")[..8];
         _clients[clientId] = ws;
+        _latestClientId = clientId;
         MainFile.Logger.Log($"WebSocket client connected: {clientId}");
 
         try
@@ -32,6 +40,15 @@ public class WebSocketHandler
                 catch { /* already closing */ }
             }
             MainFile.Logger.Log($"WebSocket client disconnected: {clientId}");
+        }
+    }
+
+    public async Task SendToLatestAsync(string message)
+    {
+        if (_latestClientId != null && _clients.TryGetValue(_latestClientId, out var ws) && ws.State == WebSocketState.Open)
+        {
+            var bytes = Encoding.UTF8.GetBytes(message);
+            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
     }
 
@@ -80,8 +97,14 @@ public class WebSocketHandler
             var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
             MainFile.Logger.Log($"WS [{clientId}]: {message}");
 
-            var echo = Encoding.UTF8.GetBytes($"echo: {message}");
-            await ws.SendAsync(new ArraySegment<byte>(echo), WebSocketMessageType.Text, true, ct);
+            try
+            {
+                await _onAction(message);
+            }
+            catch (Exception ex)
+            {
+                MainFile.Logger.Log($"Action error: {ex.Message}");
+            }
         }
     }
 }
