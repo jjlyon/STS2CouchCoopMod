@@ -11,13 +11,12 @@ Game state reading and action injection are handled by [STS2MCP](https://github.
 ## Requirements
 
 - Slay the Spire 2 with mod support enabled
-- [BaseLib](https://github.com/Alchyr/BaseLib) mod installed
 - [STS2MCP](https://github.com/Gennadiyev/STS2MCP) mod installed (provides the game state API)
 - Players' phones must be on the same local network as the game PC
 
 ## Installation
 
-1. Install BaseLib and STS2MCP following their respective instructions.
+1. Install STS2MCP following its instructions.
 2. Download the latest CouchCoopMod release (or build from source — see below).
 3. Copy `CouchCoopMod.dll` and `CouchCoopMod.json` to your StS2 mods folder:
    - **Windows:** `<Steam>/steamapps/common/Slay the Spire 2/mods/CouchCoopMod/`
