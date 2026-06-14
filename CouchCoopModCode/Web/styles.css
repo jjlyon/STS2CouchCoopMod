@@ -42,9 +42,15 @@ body {
 
 .hp { color: #e94560; font-weight: 700; }
 .energy { color: #f5c542; font-weight: 700; }
+.stars { color: #b8a7ff; font-weight: 700; }
 .block { color: #4ecdc4; }
 .gold { color: #f0c040; }
 .floor { color: #888; margin-left: auto; }
+.conn { color: #f5c542; }
+.screen-chip {
+    color: #ddd;
+    font-weight: 700;
+}
 
 /* --- Content Area --- */
 
@@ -55,6 +61,162 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+}
+
+/* --- Persistent Player Panels --- */
+
+.player-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.panel-row {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+}
+
+.mini-panel,
+.wide-panel {
+    background: #18182a;
+    border: 1px solid #303050;
+    border-radius: 6px;
+    color: #ddd;
+}
+
+.mini-panel {
+    min-width: 92px;
+    max-width: 180px;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.mini-panel summary,
+.wide-panel summary {
+    cursor: pointer;
+    font-weight: 700;
+    list-style: none;
+}
+
+.mini-panel summary::-webkit-details-marker,
+.wide-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.mini-panel summary span,
+.wide-panel summary span {
+    color: #aaa;
+    float: right;
+}
+
+.empty-slot {
+    color: #777;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wide-panel {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.8rem;
+}
+
+.mini-desc {
+    color: #aaa;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    margin-top: 0.35rem;
+}
+
+.mini-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.4rem;
+}
+
+.mini-btn {
+    min-height: 32px;
+    padding: 0.25rem 0.45rem;
+    border: 0;
+    border-radius: 4px;
+    background: #2a4a8a;
+    color: #fff;
+    font-weight: 700;
+}
+
+.mini-btn.danger { background: #8b3030; }
+
+.pile-cards,
+.relic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+}
+
+.pile-card,
+.relic,
+.small-card,
+.character-card {
+    background: #101020;
+    border: 1px solid #2d2d46;
+    border-radius: 6px;
+    padding: 0.45rem;
+}
+
+.pile-card strong,
+.relic strong,
+.small-card strong,
+.character-card strong {
+    display: block;
+    font-size: 0.78rem;
+}
+
+.pile-card span,
+.relic span,
+.character-card span {
+    color: #aaa;
+    font-size: 0.72rem;
+}
+
+.pile-card p,
+.relic p,
+.small-card p,
+.character-card p {
+    color: #aaa;
+    font-size: 0.7rem;
+    line-height: 1.3;
+    margin-top: 0.15rem;
+}
+
+.target-banner,
+.notice,
+.subtle-line {
+    border-radius: 6px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.target-banner {
+    background: #3a2230;
+    color: #ffd1dc;
+    border: 1px solid #704050;
+    text-align: center;
+}
+
+.notice {
+    background: #18182a;
+    border: 1px solid #303050;
+    color: #ccc;
+}
+
+.subtle-line {
+    background: #121222;
+    color: #aaa;
+    text-align: center;
 }
 
 /* --- Enemies --- */
@@ -195,6 +357,7 @@ body {
 .btn:disabled { opacity: 0.4; cursor: default; }
 .btn.end-turn { background: #e94560; flex: 1; max-width: 200px; }
 .btn.cancel { background: #555; }
+.btn.active { outline: 2px solid #f5c542; }
 
 /* --- Non-combat Screens --- */
 
@@ -226,6 +389,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .choice-icon {
@@ -238,7 +402,150 @@ body {
 .choice-desc { font-size: 0.8rem; color: #aaa; display: block; }
 .lookahead { font-size: 0.75rem; color: #888; margin-left: auto; }
 
+.disabled { opacity: 0.45; }
+
+/* --- Map --- */
+
+.map-board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    align-items: center;
+    background: #121222;
+    border: 1px solid #303050;
+    border-radius: 6px;
+    padding: 0.6rem;
+}
+
+.map-row {
+    display: grid;
+    grid-template-columns: repeat(var(--map-cols), 2rem);
+    gap: 0.25rem;
+}
+
+.map-cell {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid #353555;
+    border-radius: 50%;
+    background: #1c1c34;
+    color: #bbb;
+    font-weight: 800;
+    font-size: 0.72rem;
+}
+
+.map-cell.empty {
+    border-color: transparent;
+    background: transparent;
+}
+
+.map-cell.visited {
+    background: #25382f;
+    color: #b8f5b8;
+}
+
+.map-cell.travelable {
+    border-color: #f5c542;
+    background: #3a3220;
+    color: #fff2b0;
+    cursor: pointer;
+}
+
+/* --- Selection and Menu Screens --- */
+
+.bundle-list,
+.preview-strip,
+.character-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.preview-strip {
+    max-height: 38vh;
+    overflow-y: auto;
+}
+
+.bundle {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.relic-choice {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.character-card.locked { opacity: 0.5; }
+
+.character-card {
+    color: #ddd;
+    text-align: left;
+    cursor: pointer;
+}
+
+.character-card:not(.locked) {
+    border-color: #3d5f8f;
+}
+
+.character-card:active {
+    transform: scale(0.99);
+}
+
+/* --- Crystal Sphere --- */
+
+.tool-row {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.sphere-grid {
+    display: grid;
+    gap: 0.25rem;
+    width: min(100%, 420px);
+    margin: 0 auto;
+}
+
+.sphere-cell {
+    aspect-ratio: 1;
+    min-height: 34px;
+    border: 1px solid #343454;
+    border-radius: 4px;
+    background: #18182a;
+    color: #eee;
+    font-weight: 700;
+    font-size: 0.68rem;
+}
+
+.sphere-cell.hidden-cell {
+    background: #232342;
+}
+
+.sphere-cell.clickable-cell {
+    border-color: #f5c542;
+}
+
+.sphere-cell.good-cell {
+    color: #b8f5b8;
+}
+
+.sphere-cell:disabled {
+    opacity: 0.8;
+}
+
 /* --- Debug --- */
+
+.debug-details {
+    background: #111;
+    border-radius: 6px;
+    padding: 0.6rem;
+}
+
+.debug-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
 
 .debug {
     background: #111;

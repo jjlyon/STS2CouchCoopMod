@@ -14,8 +14,10 @@ public class HttpServer
     public HttpServer(int port = 8080)
     {
         _port = port;
-        _wsHandler = new WebSocketHandler(HandleAction);
+        _wsHandler = new WebSocketHandler(HandleAction, SendInitialState);
     }
+
+    public bool IsPubliclyReachable { get; private set; }
 
     public void Start()
     {
@@ -24,6 +26,7 @@ public class HttpServer
         {
             _listener.Prefixes.Add($"http://*:{_port}/");
             _listener.Start();
+            IsPubliclyReachable = true;
         }
         catch (HttpListenerException)
         {
@@ -31,9 +34,10 @@ public class HttpServer
             _listener = new HttpListener();
             _listener.Prefixes.Add($"http://localhost:{_port}/");
             _listener.Start();
-            MainFile.Logger.Log("Could not bind to all interfaces, falling back to localhost only");
+            IsPubliclyReachable = false;
+            MainFile.Logger.Info("Could not bind to all interfaces, falling back to localhost only", 0);
         }
-        MainFile.Logger.Log($"HTTP server listening on port {_port}");
+        MainFile.Logger.Info($"HTTP server listening on port {_port}", 0);
         Task.Run(() => ListenLoop(_cts.Token));
         Task.Run(() => PollStateLoop(_cts.Token));
     }
@@ -50,12 +54,19 @@ public class HttpServer
     {
         var (success, response) = await _proxy.ExecuteActionAsync(actionJson);
         if (!success)
-            MainFile.Logger.Log($"Action failed: {response}");
+            MainFile.Logger.Warn($"Action failed: {response}", 0);
 
         await Task.Delay(150);
         var state = await _proxy.GetStateAsync();
         if (state != null)
             await _wsHandler.BroadcastAsync(state);
+    }
+
+    private async Task SendInitialState()
+    {
+        var state = await _proxy.GetStateAsync();
+        if (state != null)
+            await _wsHandler.SendToLatestAsync(state);
     }
 
     private async Task PollStateLoop(CancellationToken ct)
@@ -77,7 +88,7 @@ public class HttpServer
             }
             catch (Exception ex)
             {
-                MainFile.Logger.Log($"Poll error: {ex.Message}");
+                MainFile.Logger.Warn($"Poll error: {ex.Message}", 0);
             }
         }
     }
@@ -97,7 +108,7 @@ public class HttpServer
             }
             catch (Exception ex)
             {
-                MainFile.Logger.Log($"HTTP error: {ex.Message}");
+                MainFile.Logger.Warn($"HTTP error: {ex.Message}", 0);
             }
         }
     }
@@ -107,10 +118,6 @@ public class HttpServer
         if (context.Request.IsWebSocketRequest)
         {
             await _wsHandler.AcceptConnection(context, ct);
-
-            var state = await _proxy.GetStateAsync();
-            if (state != null)
-                await _wsHandler.SendToLatestAsync(state);
             return;
         }
 

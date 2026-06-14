@@ -1,0 +1,3 @@
+[submodule "STS2MCP"]
+	path = STS2MCP
+	url = https://github.com/Gennadiyev/STS2MCP.git

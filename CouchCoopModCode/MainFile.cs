@@ -3,6 +3,7 @@ using CouchCoopMod.CouchCoopModCode.Server;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
+using System.Reflection;
 
 namespace CouchCoopMod.CouchCoopModCode;
 
@@ -16,9 +17,12 @@ public partial class MainFile : Node
 
     private static HttpServer? _server;
     private QRCodeOverlay? _overlay;
+    private bool _f9WasPressed;
 
     public static void Initialize()
     {
+        AppDomain.CurrentDomain.AssemblyResolve += ResolveModAssembly;
+
         Harmony harmony = new(ModId);
         harmony.PatchAll();
 
@@ -32,22 +36,44 @@ public partial class MainFile : Node
         _server.Start();
 
         var ip = NetworkHelper.GetLocalIp();
-        var url = $"http://{ip}:{Port}/";
+        var host = _server.IsPubliclyReachable ? ip : "localhost";
+        var url = $"http://{host}:{Port}/";
 
         _overlay = new QRCodeOverlay();
         _overlay.Setup(url);
         _overlay.Visible = false;
         AddChild(_overlay);
+        SetProcess(true);
 
-        Logger.Log($"CouchCoopMod ready — scan QR or visit {url}");
+        Logger.Info($"CouchCoopMod ready - scan QR or visit {url}", 0);
     }
 
-    public override void _UnhandledInput(InputEvent @event)
+    private static Assembly? ResolveModAssembly(object? sender, ResolveEventArgs args)
     {
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.F9 })
+        var assemblyName = new AssemblyName(args.Name).Name;
+        if (assemblyName == null) return null;
+
+        var modDir = Path.GetDirectoryName(typeof(MainFile).Assembly.Location);
+        if (modDir == null) return null;
+
+        var candidate = Path.Combine(modDir, assemblyName + ".dll");
+        return File.Exists(candidate) ? Assembly.LoadFrom(candidate) : null;
+    }
+
+    public override void _Process(double delta)
+    {
+        var f9Pressed = Input.IsKeyPressed(Key.F9);
+        if (f9Pressed && !_f9WasPressed)
         {
-            _overlay?.Toggle();
-            GetViewport().SetInputAsHandled();
+            ToggleOverlay();
         }
+
+        _f9WasPressed = f9Pressed;
+    }
+
+    private void ToggleOverlay()
+    {
+        _overlay?.Toggle();
+        Logger.Info($"CouchCoopMod overlay visible: {_overlay?.Visible}", 0);
     }
 }

@@ -41,13 +41,27 @@ public partial class QRCodeOverlay : CanvasLayer
         };
         title.AddThemeFontSizeOverride("font_size", 28);
 
-        var qrRect = new TextureRect
+        Control qrNode;
+        try
         {
-            Texture = GenerateQRTexture(url),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(256, 256)
-        };
+            qrNode = new TextureRect
+            {
+                Texture = GenerateQRTexture(url),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                CustomMinimumSize = new Vector2(256, 256)
+            };
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Warn($"QR generation failed: {ex.Message}", 0);
+            qrNode = new Label
+            {
+                Text = "Open this URL on your phone:",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                CustomMinimumSize = new Vector2(256, 96)
+            };
+        }
 
         var urlLabel = new Label
         {
@@ -64,7 +78,7 @@ public partial class QRCodeOverlay : CanvasLayer
         hint.AddThemeColorOverride("font_color", new Color(0.6f, 0.6f, 0.6f));
 
         vbox.AddChild(title);
-        vbox.AddChild(qrRect);
+        vbox.AddChild(qrNode);
         vbox.AddChild(urlLabel);
         vbox.AddChild(hint);
         margin.AddChild(vbox);

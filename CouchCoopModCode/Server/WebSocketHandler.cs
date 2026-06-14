@@ -9,11 +9,13 @@ public class WebSocketHandler
 {
     private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
     private readonly Func<string, Task> _onAction;
+    private readonly Func<Task>? _onConnected;
     private string? _latestClientId;
 
-    public WebSocketHandler(Func<string, Task> onAction)
+    public WebSocketHandler(Func<string, Task> onAction, Func<Task>? onConnected = null)
     {
         _onAction = onAction;
+        _onConnected = onConnected;
     }
 
     public int ClientCount => _clients.Count;
@@ -25,10 +27,13 @@ public class WebSocketHandler
         var clientId = Guid.NewGuid().ToString("N")[..8];
         _clients[clientId] = ws;
         _latestClientId = clientId;
-        MainFile.Logger.Log($"WebSocket client connected: {clientId}");
+        MainFile.Logger.Info($"WebSocket client connected: {clientId}", 0);
 
         try
         {
+            if (_onConnected != null)
+                await _onConnected();
+
             await ReceiveLoop(clientId, ws, ct);
         }
         finally
@@ -39,7 +44,7 @@ public class WebSocketHandler
                 try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); }
                 catch { /* already closing */ }
             }
-            MainFile.Logger.Log($"WebSocket client disconnected: {clientId}");
+            MainFile.Logger.Info($"WebSocket client disconnected: {clientId}", 0);
         }
     }
 
@@ -95,7 +100,7 @@ public class WebSocketHandler
                 break;
 
             var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-            MainFile.Logger.Log($"WS [{clientId}]: {message}");
+            MainFile.Logger.Info($"WS [{clientId}]: {message}", 0);
 
             try
             {
@@ -103,7 +108,7 @@ public class WebSocketHandler
             }
             catch (Exception ex)
             {
-                MainFile.Logger.Log($"Action error: {ex.Message}");
+                MainFile.Logger.Warn($"Action error: {ex.Message}", 0);
             }
         }
     }

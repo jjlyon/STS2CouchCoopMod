@@ -62,14 +62,18 @@ To configure the StS2 install path manually, create a `Directory.Build.props` fi
 
 ## Supported Game Screens
 
-- Combat (hand, enemies, card play with targeting, end turn)
-- Map navigation
-- Events and dialogue
+- Combat (hand, enemies, card play with targeting, end turn, potions, relics, draw/discard/exhaust piles)
+- Map navigation with boss and path context
+- Events, dialogue, and fake merchant
 - Rest sites
-- Rewards
-- Card selection / card rewards
+- Rewards and card rewards
 - Shop
-- Generic fallback for unhandled screens
+- Treasure rooms
+- Card upgrade, transform, remove, and in-combat hand selection
+- Relic and bundle selection
+- Crystal Sphere
+- Live menu, popup/tutorial, and game-over controls
+- Manual-interaction fallback for unsupported overlays
 
 ## License
 

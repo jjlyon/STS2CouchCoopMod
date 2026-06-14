@@ -58,20 +58,25 @@ CouchCoopMod/
 - [x] **Combat UI** — hand cards, enemies with HP/intents, card targeting flow, end turn
 - [x] **Map UI** — path selection with node type icons
 - [x] **Event UI** — dialogue, option buttons, advance dialogue
-- [x] **Other screens** — rest site, rewards, card rewards, shop, hand select, generic fallback
+- [x] **Other screens** — rest site, rewards, card rewards, shop, fake merchant, hand select, selection overlays, treasure, Crystal Sphere, menu/game-over, generic fallback
 - [x] **README** — installation, usage, build instructions
 
 ### Phase 2: Full Single-Player Coverage
 
-- [ ] Potion management (use/discard from web UI)
-- [ ] Relic display (current relics with descriptions)
-- [ ] Card piles (view draw/discard/exhaust counts, tap to see contents)
-- [ ] Reconnection handling (browser refresh resumes session)
-- [ ] Treasure rooms
-- [ ] Card upgrade/transform/remove selection
-- [ ] Crystal Sphere minigame
-- [ ] Relic selection (boss relics)
-- [ ] Bundle selection
+- [x] Potion management (use/discard from web UI)
+- [x] Relic display (current relics with descriptions)
+- [x] Card piles (view draw/discard/exhaust counts, tap to see contents)
+- [x] Reconnection handling (browser refresh resumes session)
+- [x] Treasure rooms
+- [x] Card upgrade/transform/remove selection
+- [x] Crystal Sphere minigame
+- [x] Relic selection (boss relics)
+- [x] Bundle selection
+- [x] Fake merchant
+- [x] Game-over and live menu controls
+- [x] Generic overlay/manual-interaction states
+
+Non-live STS2MCP endpoints (`/api/v1/profile`, `/api/v1/compendium`, `/api/v1/wiki`, `/api/v1/profiles`) are intentionally out of scope for the phone gameplay UI.
 
 ### Phase 3: Multi-Player Support
 
@@ -128,3 +133,5 @@ Client → Server: STS2MCP action format (`{ "action": "play_card", "card_index"
 6. Navigate map from phone
 7. Choose event option from phone
 8. Refresh phone browser — verify reconnection works
+9. Verify potions, relics, and combat piles render from phone
+10. Verify treasure, card selection, bundle selection, relic selection, Crystal Sphere, fake merchant, and game-over/menu states
