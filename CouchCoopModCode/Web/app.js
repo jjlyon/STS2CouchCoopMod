@@ -9,6 +9,7 @@ let lobbyNotice = '';
 let selectedPlayerCount = Number(localStorage.getItem('couch_player_count') || 2);
 let selectedSeed = localStorage.getItem('couch_run_seed') || '';
 let autoReturnedGameOver = false;
+const openPanels = new Set();
 
 const COMBAT_TYPES = ['monster', 'elite', 'boss'];
 const TARGET_ENEMY_TYPES = ['anyenemy', 'any_enemy', 'single_enemy'];
@@ -348,8 +349,10 @@ function renderStatusBar() {
 }
 
 function setMainContent(markup, includePanels = true) {
+    rememberOpenPanels();
     const panels = includePanels ? renderPlayerPanels() : '';
     document.getElementById('content').innerHTML = `${panels}${markup}`;
+    restoreOpenPanels();
 }
 
 function setActionBar(markup = '') {
@@ -381,7 +384,7 @@ function renderPotionsPanel(potions) {
     for (let i = 0; i < maxSlots; i++) {
         const potion = potions.find(p => p.slot === i);
         slots.push(potion ? `
-            <details class="mini-panel potion-slot">
+            <details class="mini-panel potion-slot" data-panel-id="potion-${Number(potion.slot)}">
                 <summary>${escapeHtml(potion.name)} <span>${escapeHtml(potion.slot)}</span></summary>
                 <div class="mini-desc">${escapeHtml(potion.description || '')}</div>
                 <div class="mini-actions">
@@ -402,7 +405,7 @@ function renderPilesPanel(piles) {
     return `
         <div class="panel-row">
             ${piles.map(p => `
-                <details class="mini-panel pile-panel">
+                <details class="mini-panel pile-panel" data-panel-id="pile-${attr(p.key)}">
                     <summary>${escapeHtml(p.label)} <span>${escapeHtml(p.count)}</span></summary>
                     ${renderPileCards(state.player?.[p.key] || [])}
                 </details>
@@ -429,7 +432,7 @@ function renderPileCards(cards) {
 function renderRelicsPanel(relics) {
     if (!relics.length) return '';
     return `
-        <details class="wide-panel">
+        <details class="wide-panel" data-panel-id="relics">
             <summary>Relics <span>${relics.length}</span></summary>
             <div class="relic-list">
                 ${relics.map(r => `
@@ -442,6 +445,27 @@ function renderRelicsPanel(relics) {
             </div>
         </details>
     `;
+}
+
+function rememberOpenPanels() {
+    document.querySelectorAll('details[data-panel-id]').forEach(details => {
+        if (details.open)
+            openPanels.add(details.dataset.panelId);
+        else
+            openPanels.delete(details.dataset.panelId);
+    });
+}
+
+function restoreOpenPanels() {
+    document.querySelectorAll('details[data-panel-id]').forEach(details => {
+        details.open = openPanels.has(details.dataset.panelId);
+        details.addEventListener('toggle', () => {
+            if (details.open)
+                openPanels.add(details.dataset.panelId);
+            else
+                openPanels.delete(details.dataset.panelId);
+        });
+    });
 }
 
 // --- Combat ---
@@ -460,10 +484,11 @@ function renderCombat() {
         </div>
     `);
 
+    const isReady = state.player?.is_ready_to_end_turn === true;
     const canEnd = state.player?.can_end_turn !== false;
     setActionBar(`
         ${selectedCard !== null || selectedPotion !== null ? `<button class="btn cancel" onclick="cancelTargeting()">Cancel</button>` : ''}
-        <button class="btn end-turn" ${canEnd ? '' : 'disabled'} onclick="endTurn()">End Turn</button>
+        <button class="btn end-turn" ${canEnd || isReady ? '' : 'disabled'} onclick="${isReady ? 'undoEndTurn()' : 'endTurn()'}">${isReady ? 'Undo End Turn' : 'End Turn'}</button>
     `);
 
     const content = document.getElementById('content');
@@ -567,6 +592,10 @@ function playCard(cardIndex, targetId) {
 
 function endTurn() {
     send({ action: 'end_turn' });
+}
+
+function undoEndTurn() {
+    send({ action: 'undo_end_turn' });
 }
 
 function usePotion(slot) {
@@ -833,14 +862,14 @@ function shopItemDescription(item) {
 function renderHandSelect() {
     const hs = state.hand_select || {};
     const cards = hs.cards || state.player?.hand || [];
-    const selected = hs.selected_cards || [];
+    const selected = hs.selected_cards || cards.filter(c => c.selected);
 
     setMainContent(`
         <div class="screen-title">${escapeHtml(hs.prompt || 'Select a card')}</div>
         ${selected.length ? `<div class="subtle-line">Selected: ${escapeHtml(selected.map(c => c.name).join(', '))}</div>` : ''}
         <div class="hand">
             ${cards.map((c, i) => `
-                <div class="card playable ${attr(String(c.type || '').toLowerCase())}" onclick="send({action:'combat_select_card',card_index:${Number(c.index ?? i)}})">
+                <div class="card playable ${c.selected ? 'selected' : ''} ${attr(String(c.type || '').toLowerCase())}" onclick="selectHandPromptCard(${Number(c.index ?? i)})">
                     <div class="card-cost">${escapeHtml(c.cost ?? '?')}</div>
                     <div class="card-name">${escapeHtml(c.name)}</div>
                     <div class="card-desc">${escapeHtml(c.description || '')}</div>
@@ -848,7 +877,27 @@ function renderHandSelect() {
             `).join('')}
         </div>
     `);
-    setActionBar(`<button class="btn" ${hs.can_confirm === false ? 'disabled' : ''} onclick="send({action:'combat_confirm_selection'})">Confirm</button>`);
+    setActionBar(`
+        ${hs.can_cancel ? `<button class="btn cancel" onclick="cancelHandPromptSelection()">Cancel</button>` : ''}
+        <button class="btn" ${hs.can_confirm === false ? 'disabled' : ''} onclick="confirmHandPromptSelection()">Confirm</button>
+    `);
+}
+
+function selectHandPromptCard(index) {
+    const hs = state.hand_select || {};
+    if (hs.remote_choice)
+        send({ action: 'select_card', index });
+    else
+        send({ action: 'combat_select_card', card_index: index });
+}
+
+function confirmHandPromptSelection() {
+    const hs = state.hand_select || {};
+    send({ action: hs.remote_choice ? 'confirm_selection' : 'combat_confirm_selection' });
+}
+
+function cancelHandPromptSelection() {
+    send({ action: 'cancel_selection' });
 }
 
 function renderCardSelect() {

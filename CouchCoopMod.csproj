@@ -83,6 +83,14 @@
         <Copy SourceFiles="@(ModDependencyAssemblies)" DestinationFolder="$(ModsPath)$(MSBuildProjectName)/" SkipUnchangedFiles="true" />
     </Target>
 
+    <Target Name="BuildAndInstallMcp" AfterTargets="Build" Condition="'$(SkipMcpInstall)' != 'true' And Exists('STS2MCP/STS2_MCP.csproj')">
+        <Message Text="Building and installing STS2 MCP." Importance="high" />
+        <MSBuild
+            Projects="STS2MCP/STS2_MCP.csproj"
+            Targets="Build"
+            Properties="Configuration=$(Configuration);STS2GameDir=$(Sts2Path)" />
+    </Target>
+
     <Target Name="CopyQuickPck" AfterTargets="PackPck" Condition="Exists('$(PckPackerOutputPath)') And '$(PckPackerSkipped)' != 'true'">
         <Message Text="Copying quick .pck to mods folder." Importance="high"/>
         <Copy SourceFiles="$(PckPackerOutputPath)"
