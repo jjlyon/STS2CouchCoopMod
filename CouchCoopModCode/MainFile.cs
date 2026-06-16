@@ -1,3 +1,4 @@
+using CouchCoopMod.CouchCoopModCode.Couch;
 using CouchCoopMod.CouchCoopModCode.QRCode;
 using CouchCoopMod.CouchCoopModCode.Server;
 using Godot;
@@ -17,6 +18,7 @@ public partial class MainFile : Node
 
     private static HttpServer? _server;
     private QRCodeOverlay? _overlay;
+    private CouchRunBootstrapper? _bootstrapper;
     private bool _f9WasPressed;
 
     public static void Initialize()
@@ -43,6 +45,10 @@ public partial class MainFile : Node
         _overlay.Setup(url);
         _overlay.Visible = false;
         AddChild(_overlay);
+
+        _bootstrapper = new CouchRunBootstrapper();
+        AddChild(_bootstrapper);
+
         SetProcess(true);
 
         Logger.Info($"CouchCoopMod ready - scan QR or visit {url}", 0);

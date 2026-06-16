@@ -3,6 +3,12 @@ let state = null;
 let selectedCard = null;
 let selectedPotion = null;
 let lastStateType = null;
+let session = null;
+let lobby = null;
+let lobbyNotice = '';
+let selectedPlayerCount = Number(localStorage.getItem('couch_player_count') || 2);
+let selectedSeed = localStorage.getItem('couch_run_seed') || '';
+let autoReturnedGameOver = false;
 
 const COMBAT_TYPES = ['monster', 'elite', 'boss'];
 const TARGET_ENEMY_TYPES = ['anyenemy', 'any_enemy', 'single_enemy'];
@@ -13,6 +19,12 @@ function connect() {
         document.getElementById('connecting').style.display = 'none';
         document.getElementById('game').style.display = 'flex';
         setConnectionLabel('');
+        const name = localStorage.getItem('couch_player_name') || defaultPlayerName();
+        const savedSessionId = localStorage.getItem('couch_session_id');
+        if (savedSessionId)
+            ws.send(JSON.stringify({ type: 'rejoin', session_id: savedSessionId }));
+        else
+            ws.send(JSON.stringify({ type: 'join', name }));
     };
     ws.onclose = () => {
         if (state) {
@@ -27,19 +39,51 @@ function connect() {
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {
         try {
-            const nextState = JSON.parse(e.data);
-            if (lastStateType !== null && nextState.state_type !== lastStateType)
+            const message = JSON.parse(e.data);
+            if (message.type === 'session') {
+                session = message;
+                localStorage.setItem('couch_session_id', session.session_id);
+                if (session.name) localStorage.setItem('couch_player_name', session.name);
+                lobbyNotice = '';
+                render();
+                return;
+            }
+            if (message.type === 'lobby') {
+                lobby = message;
+                render();
+                return;
+            }
+            if (message.type === 'notice') {
+                lobbyNotice = message.message || '';
+                setConnectionLabel(lobbyNotice);
+                render();
+                return;
+            }
+            if (message.type === 'error') {
+                lobbyNotice = message.message || 'Error';
+                setConnectionLabel(message.message || 'Error');
+                render();
+                return;
+            }
+
+            const nextState = message.type === 'state' ? message.state : message;
+            if (lastStateType !== null && nextState?.state_type !== lastStateType)
                 clearTransientSelection();
             state = nextState;
-            lastStateType = state.state_type;
+            lastStateType = state?.state_type;
+            if (state?.state_type !== 'game_over')
+                autoReturnedGameOver = false;
             render();
         } catch { /* ignore non-json */ }
     };
 }
 
 function send(action) {
-    if (ws && ws.readyState === WebSocket.OPEN)
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (action.type)
         ws.send(JSON.stringify(action));
+    else
+        ws.send(JSON.stringify({ type: 'action', ...action }));
 }
 
 function setConnectionLabel(text) {
@@ -84,6 +128,10 @@ function titleCase(value) {
         .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function defaultPlayerName() {
+    return `Player ${Math.floor(Math.random() * 90) + 10}`;
+}
+
 function isCombatState() {
     return COMBAT_TYPES.includes(state?.state_type);
 }
@@ -91,6 +139,10 @@ function isCombatState() {
 // --- Rendering ---
 
 function render() {
+    if (!session || !state || shouldShowCouchLobby()) {
+        renderCouchLobby();
+        return;
+    }
     if (!state) return;
     renderStatusBar();
 
@@ -132,14 +184,149 @@ function render() {
         renderGeneric();
 }
 
+function shouldShowCouchLobby() {
+    if (!session) return true;
+    if (state?.state_type === 'menu')
+        return lobby?.couch_initialized === true;
+    if (state?.state_type === 'couch_lobby') return true;
+    if (session.player_slot === null || session.player_slot === undefined) return true;
+    return false;
+}
+
+function renderCouchLobby() {
+    const game = document.getElementById('game');
+    if (game.style.display === 'none') return;
+    renderStatusBar();
+    const slots = getVisibleLobbySlots();
+    const currentSlot = session?.player_slot;
+    const playerName = session?.name || localStorage.getItem('couch_player_name') || defaultPlayerName();
+    const hasSlot = currentSlot !== null && currentSlot !== undefined;
+    const slotLabel = hasSlot ? `Player ${Number(currentSlot) + 1}${session?.is_host ? ' / Host' : ''}` : 'No slot';
+    const canStart = slots.filter(s => s.claimed).length > 0 || hasSlot;
+    const isHost = session?.is_host === true || lobby?.host_session_id === session?.session_id;
+    document.getElementById('content').innerHTML = `
+        <section class="couch-lobby">
+            <div class="screen-title">Couch Co-op Lobby</div>
+            <div class="lobby-card">
+                <label class="field-label" for="player-name">Name</label>
+                <div class="name-row">
+                    <input id="player-name" class="text-input" maxlength="24" value="${attr(playerName)}" autocomplete="off">
+                    <button class="icon-btn" title="Save name" onclick="savePlayerName()">Save</button>
+                </div>
+                <div class="lobby-status">
+                    <span>${escapeHtml(slotLabel)}</span>
+                    ${state?.state_type ? `<span>${escapeHtml(titleCase(state.state_type))}</span>` : ''}
+                </div>
+            </div>
+            ${lobbyNotice ? `<div class="notice">${escapeHtml(lobbyNotice)}</div>` : ''}
+            <div class="player-count-row" role="group" aria-label="Player count">
+                ${[2, 3, 4].map(count => `
+                    <button class="seg-btn ${selectedPlayerCount === count ? 'active' : ''}" ${isHost ? '' : 'disabled'} onclick="setPlayerCount(${count})">${count}P</button>
+                `).join('')}
+            </div>
+            ${isHost ? `
+                <div class="lobby-card">
+                    <label class="field-label" for="run-seed">Seed</label>
+                    <input id="run-seed" class="text-input" maxlength="32" value="${attr(selectedSeed)}" autocomplete="off" placeholder="Random" oninput="selectedSeed=this.value">
+                </div>
+            ` : ''}
+            <div class="slot-grid">
+                ${slots.map(s => `
+                    <button class="slot-card ${s.claimed ? 'claimed' : ''} ${hasSlot && Number(currentSlot) === Number(s.slot) ? 'mine' : ''}"
+                        ${s.claimed && (!hasSlot || Number(currentSlot) !== Number(s.slot)) ? 'disabled' : ''}
+                        onclick="claimSlot(${Number(s.slot)})">
+                        <strong>Player ${Number(s.slot) + 1}</strong>
+                        <span>${slotSubtitle(s, hasSlot, currentSlot)}</span>
+                    </button>
+                `).join('')}
+            </div>
+            <button class="btn start-run" ${canStart && isHost ? '' : 'disabled'} onclick="startCouchRun()">Start Local Run</button>
+            ${lobby?.players?.length ? `
+                <div class="phone-list">
+                    ${lobby.players.map(p => `
+                        <div class="phone-row">
+                            <span>${escapeHtml(p.name || 'Player')}</span>
+                            <span>${escapeHtml(phoneRoleLabel(p))}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </section>
+    `;
+    document.getElementById('action-bar').innerHTML = '';
+}
+
+function getVisibleLobbySlots() {
+    const known = lobby?.slots || [];
+    const bySlot = new Map(known.map(s => [Number(s.slot), s]));
+    const count = Math.max(2, Math.min(4, selectedPlayerCount || 2));
+    return Array.from({ length: count }, (_, slot) => bySlot.get(slot) || { slot, claimed: false });
+}
+
+function slotSubtitle(slot, hasSlot, currentSlot) {
+    if (hasSlot && Number(currentSlot) === Number(slot.slot)) return 'Claimed by you';
+    if (slot.claimed) return escapeHtml(slot.name || 'Claimed');
+    return 'Open';
+}
+
+function phoneRoleLabel(player) {
+    if (player.role === 'spectator') return 'Spectator';
+    if (player.player_slot !== null && player.player_slot !== undefined) return `Player ${Number(player.player_slot) + 1}`;
+    return 'Unclaimed';
+}
+
+function savePlayerName() {
+    const input = document.getElementById('player-name');
+    const name = (input?.value || defaultPlayerName()).trim().slice(0, 24) || defaultPlayerName();
+    localStorage.setItem('couch_player_name', name);
+    send({ type: 'join', name });
+}
+
+function setPlayerCount(count) {
+    selectedPlayerCount = count;
+    localStorage.setItem('couch_player_count', String(count));
+    renderCouchLobby();
+}
+
+function saveRunSeed() {
+    const input = document.getElementById('run-seed');
+    selectedSeed = (input?.value || '').trim().slice(0, 32);
+    if (selectedSeed)
+        localStorage.setItem('couch_run_seed', selectedSeed);
+    else
+        localStorage.removeItem('couch_run_seed');
+    return selectedSeed;
+}
+
+function initCouchSession() {
+    savePlayerName();
+    saveRunSeed();
+    send({ type: 'init_couch', player_count: selectedPlayerCount });
+}
+
+function claimSlot(slot) {
+    savePlayerName();
+    send({ type: 'claim_slot', slot });
+}
+
+function startCouchRun() {
+    savePlayerName();
+    const seed = saveRunSeed();
+    const message = { type: 'start_couch', player_count: selectedPlayerCount };
+    if (seed)
+        message.seed = seed;
+    send(message);
+}
+
 function renderStatusBar() {
-    const p = state.player;
+    const p = state?.player;
     const bar = document.getElementById('status-bar');
     const connection = bar.dataset.connection ? `<span class="conn">${escapeHtml(bar.dataset.connection)}</span>` : '';
 
     if (!p) {
         bar.innerHTML = `
-            <span class="screen-chip">${escapeHtml(titleCase(state.menu_screen || state.state_type || 'Menu'))}</span>
+            <span class="screen-chip">${escapeHtml(titleCase(state?.menu_screen || state?.state_type || 'Lobby'))}</span>
+            ${session?.player_slot !== undefined && session?.player_slot !== null ? `<span class="floor">P${Number(session.player_slot) + 1}</span>` : ''}
             ${connection}
         `;
         return;
@@ -155,6 +342,7 @@ function renderStatusBar() {
         ${block}
         <span class="gold">${escapeHtml(p.gold)}g</span>
         ${connection}
+        ${session?.player_slot !== undefined && session?.player_slot !== null ? `<span>P${Number(session.player_slot) + 1}</span>` : ''}
         <span class="floor">F${escapeHtml(state.run?.floor || '?')}</span>
     `;
 }
@@ -485,10 +673,14 @@ function chooseMapNode(index) {
 function renderEvent() {
     const evt = state.event || {};
     const options = evt.options || [];
+    const body = evt.body && !String(evt.body).includes('.pages.DONE.description')
+        ? evt.body
+        : (evt.can_proceed ? 'Done. Waiting to continue.' : '');
 
     setMainContent(`
         <div class="screen-title">${escapeHtml(evt.event_name || 'Event')}</div>
-        <div class="event-body">${escapeHtml(evt.body || '')}</div>
+        <div class="event-body">${escapeHtml(body)}</div>
+        ${evt.waiting_for_all_players ? `<div class="notice">Waiting for the other players.</div>` : ''}
         <div class="choices">
             ${options.map(o => `
                 <button class="btn choice ${o.is_locked ? 'disabled' : ''}"
@@ -504,7 +696,9 @@ function renderEvent() {
 
     setActionBar(evt.in_dialogue
         ? `<button class="btn" onclick="send({action:'advance_dialogue'})">Continue</button>`
-        : '');
+        : (evt.can_proceed
+            ? `<button class="btn" ${evt.waiting_for_all_players ? 'disabled' : ''} onclick="send({action:'proceed'})">Continue</button>`
+            : ''));
 }
 
 function chooseEventOption(index) {
@@ -798,11 +992,32 @@ function renderMenu() {
         ${state.epochs ? renderEpochSummary() : ''}
         ${state.friends ? renderFriendSummary() : ''}
         ${state.lobby ? renderLobbySummary(state.lobby) : ''}
+        ${renderLocalCoopEntry()}
         <div class="choices">
             ${options.map(o => renderMenuOption(o)).join('')}
         </div>
     `, false);
     setActionBar('');
+}
+
+function renderLocalCoopEntry() {
+    if (lobby?.couch_initialized) return '';
+    return `
+        <section class="lobby-card">
+            <div class="lobby-status">
+                <span>Local Co-op</span>
+                <span>${selectedPlayerCount} players</span>
+            </div>
+            <div class="player-count-row" role="group" aria-label="Local co-op player count">
+                ${[2, 3, 4].map(count => `
+                    <button class="seg-btn ${selectedPlayerCount === count ? 'active' : ''}" onclick="setPlayerCount(${count})">${count}P</button>
+                `).join('')}
+            </div>
+            <label class="field-label" for="run-seed">Seed</label>
+            <input id="run-seed" class="text-input" maxlength="32" value="${attr(selectedSeed)}" autocomplete="off" placeholder="Random" oninput="selectedSeed=this.value">
+            <button class="btn start-run" onclick="initCouchSession()">Start Local Co-op</button>
+        </section>
+    `;
 }
 
 function normalizeOptions(options) {
@@ -857,9 +1072,13 @@ function renderLobbySummary(lobby) {
 }
 
 function renderGameOver() {
+    if (!autoReturnedGameOver) {
+        autoReturnedGameOver = true;
+        setTimeout(() => menuSelect('main_menu'), 250);
+    }
     setMainContent(`
         <div class="screen-title">Run Ended</div>
-        <div class="notice">${escapeHtml(state.game_over?.message || 'Run ended.')}</div>
+        <div class="notice">${escapeHtml(state.game_over?.message || 'Run ended. Returning to main menu...')}</div>
     `, false);
     setActionBar(`<button class="btn" onclick="menuSelect('main_menu')">Main Menu</button>`);
 }

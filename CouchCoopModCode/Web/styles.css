@@ -492,6 +492,160 @@ body {
     transform: scale(0.99);
 }
 
+/* --- Couch Lobby --- */
+
+.couch-lobby {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.lobby-card {
+    background: #18182a;
+    border: 1px solid #303050;
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.field-label {
+    color: #aaa;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.name-row {
+    display: flex;
+    gap: 0.45rem;
+}
+
+.text-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    border: 1px solid #3a4c66;
+    border-radius: 6px;
+    background: #101020;
+    color: #eee;
+    font: inherit;
+    padding: 0.55rem 0.65rem;
+}
+
+.icon-btn,
+.seg-btn {
+    min-height: 44px;
+    border: 0;
+    border-radius: 6px;
+    color: #fff;
+    font-weight: 700;
+    background: #2a4a8a;
+    padding: 0.55rem 0.75rem;
+}
+
+.lobby-status,
+.phone-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: #aaa;
+    font-size: 0.8rem;
+}
+
+.player-count-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+}
+
+.seg-btn {
+    background: #1e1e3a;
+    border: 1px solid #303050;
+}
+
+.seg-btn.active {
+    border-color: #f5c542;
+    background: #3a3220;
+    color: #fff2b0;
+}
+
+.slot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.start-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.start-row .btn {
+    min-width: 0;
+    padding-inline: 0.5rem;
+}
+
+.slot-card {
+    min-height: 96px;
+    border: 1px solid #345c73;
+    border-radius: 8px;
+    background: #162432;
+    color: #e8f6ff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.75rem;
+    text-align: left;
+}
+
+.slot-card strong {
+    font-size: 0.95rem;
+}
+
+.slot-card span {
+    color: #a8c9d8;
+    font-size: 0.8rem;
+}
+
+.slot-card.claimed {
+    border-color: #f0c040;
+    background: #302a18;
+}
+
+.slot-card.mine {
+    border-color: #4ecdc4;
+    background: #123235;
+}
+
+.slot-card:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.start-run {
+    width: 100%;
+    background: #2f6f4f;
+}
+
+.phone-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background: #121222;
+    border: 1px solid #303050;
+    border-radius: 8px;
+    padding: 0.65rem;
+}
+
+.phone-row span:first-child {
+    color: #ddd;
+    font-weight: 700;
+}
+
 /* --- Crystal Sphere --- */
 
 .tool-row {
