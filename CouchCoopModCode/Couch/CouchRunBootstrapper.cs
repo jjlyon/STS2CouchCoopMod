@@ -228,7 +228,7 @@ public partial class CouchRunBootstrapper : Node, IStartRunLobbyListener
                 seed);
 
             MainFile.Logger.Info("Couch bootstrap: setting up RunManager multiplayer state", 0);
-            RunManager.Instance.SetUpNewMultiPlayer(runState, _lobby, shouldSave: true);
+            SetUpNewMultiplayerRun(runState, _lobby, shouldSave: true);
 
             MainFile.Logger.Info("Couch bootstrap: finalizing relics and launching run", 0);
             await RunManager.Instance.FinalizeStartingRelics();
@@ -271,6 +271,30 @@ public partial class CouchRunBootstrapper : Node, IStartRunLobbyListener
         {
             IsStarting = false;
         }
+    }
+
+    private static void SetUpNewMultiplayerRun(RunState runState, StartRunLobby lobby, bool shouldSave)
+    {
+        var runManager = RunManager.Instance;
+        var method = typeof(RunManager).GetMethod(
+                         "SetUpNewMultiPlayer",
+                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                     ?? typeof(RunManager).GetMethod(
+                         "SetUpNewMultiplayer",
+                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        if (method == null)
+            throw new MissingMethodException(typeof(RunManager).FullName, "SetUpNewMultiPlayer");
+
+        var parameters = method.GetParameters();
+        var args = parameters.Length switch
+        {
+            3 => new object?[] { runState, lobby, shouldSave },
+            4 => new object?[] { runState, lobby, shouldSave, null },
+            _ => throw new MissingMethodException(typeof(RunManager).FullName, method.Name)
+        };
+
+        method.Invoke(runManager, args);
     }
 
     private static string NormalizeSeed(string? seed)
