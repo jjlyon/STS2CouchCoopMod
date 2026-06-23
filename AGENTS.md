@@ -13,23 +13,13 @@ This repository contains a Slay the Spire 2 Godot/.NET mod. Main C# source lives
 
 ## Build, Test, and Development Commands
 
+For development, testing, building, and installation guidelines, consult `docs/codex-dev-loop.md` first and treat it as the source of truth for the current Codex workflow.
+
 ```powershell
 dotnet build
 ```
 
 Builds the mod and installs `CouchCoopMod.dll`, manifest, and dependencies into the detected STS2 mods folder.
-
-```powershell
-dotnet build /p:SkipModInstall=true
-```
-
-Compile-only check. Prefer this while STS2 is running because the loaded mod DLL may be locked.
-
-```powershell
-dotnet build /p:SkipMcpInstall=true
-```
-
-Builds this mod without rebuilding/installing `STS2MCP`.
 
 If STS2 or Godot paths are not detected, create a gitignored `Directory.Build.props` as shown in `README.md`.
 
@@ -39,7 +29,7 @@ Use C# with nullable reference types enabled. Follow existing style: 4-space ind
 
 ## Testing Guidelines
 
-There is no formal test suite in this repo yet. For live behavior testing, follow `docs/codex-dev-loop.md`: close STS2, run `dotnet build` to install the changed mod, launch STS2, then use `tools/CouchCoopHarness` for health/start/state/action/reset. Manually or browser-test the phone UI at `http://<game-pc-ip>:8080/`, covering lobby, slot claim, start, combat, map, rewards, and reset/abandon if touched.
+There is no formal test suite in this repo yet. All testing must follow `docs/codex-dev-loop.md`; treat that document as the source of truth for the current Codex development, testing, building, and installation workflow. In particular, close STS2 before building, run `dotnet build` so the changed mod is installed, launch STS2, then use `tools/CouchCoopHarness` for health/start/state/action/reset. Manually or browser-test the phone UI at `http://<game-pc-ip>:8080/`, covering lobby, slot claim, start, combat, map, rewards, and reset/abandon if touched.
 
 ## Commit & Pull Request Guidelines
 
@@ -51,4 +41,4 @@ Do not edit generated reference files under `reference/sts2-decompiled/` unless 
 
 When implementing mod functionality not already built into this mod, first consult `docs/sts2-game-flow-for-modders.md` for relevant run, map, combat, event, menu, and multiplayer hook points.
 
-When testing through Codex, prefer the maintained harness in `tools/CouchCoopHarness` over scratch scripts in `tmp/`. The harness provides plumbing only; use current state and the user's requested scenario to decide which legal actions to send.
+When developing, testing, building, or installing through Codex, follow `docs/codex-dev-loop.md` rather than improvising a separate workflow. Use the maintained harness in `tools/CouchCoopHarness` over scratch scripts in `tmp/`. The harness provides plumbing only; use current state and the user's requested scenario to decide which legal actions to send.

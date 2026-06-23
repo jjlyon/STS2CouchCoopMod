@@ -229,6 +229,11 @@ public partial class CouchRunBootstrapper : Node, IStartRunLobbyListener
 
             MainFile.Logger.Info("Couch bootstrap: setting up RunManager multiplayer state", 0);
             SetUpNewMultiplayerRun(runState, _lobby, shouldSave: true);
+            if (RunManager.Instance.CombatStateSynchronizer != null)
+            {
+                RunManager.Instance.CombatStateSynchronizer.IsDisabled = true;
+                MainFile.Logger.Info("Couch bootstrap: disabled network combat-state sync barrier", 0);
+            }
 
             MainFile.Logger.Info("Couch bootstrap: finalizing relics and launching run", 0);
             await RunManager.Instance.FinalizeStartingRelics();
@@ -244,8 +249,8 @@ public partial class CouchRunBootstrapper : Node, IStartRunLobbyListener
             MainFile.Logger.Info("Couch bootstrap: generating map", 0);
             await RunManager.Instance.GenerateMap();
 
-            MainFile.Logger.Info("Couch bootstrap: entering map room directly", 0);
-            await EnterRoomInternalDirect(new MapRoom());
+            MainFile.Logger.Info("Couch bootstrap: entering initial map room through compatibility facade", 0);
+            await EnterInitialMapRoomThroughRunManager(new MapRoom());
 
             MainFile.Logger.Info("Couch bootstrap: saving run", 0);
             await SaveManager.Instance.SaveRun(null);
@@ -275,6 +280,8 @@ public partial class CouchRunBootstrapper : Node, IStartRunLobbyListener
 
     private static void SetUpNewMultiplayerRun(RunState runState, StartRunLobby lobby, bool shouldSave)
     {
+        // Compatibility facade for RunManager.SetUpNewMultiPlayer(RunState, StartRunLobby, bool, DateTimeOffset?).
+        // Couch bootstrap still needs the native multiplayer setup because it creates all run synchronizers.
         var runManager = RunManager.Instance;
         var method = typeof(RunManager).GetMethod(
                          "SetUpNewMultiPlayer",
@@ -337,8 +344,12 @@ public partial class CouchRunBootstrapper : Node, IStartRunLobbyListener
         _netService = null;
     }
 
-    private static async Task EnterRoomInternalDirect(AbstractRoom room)
+    private static async Task EnterInitialMapRoomThroughRunManager(AbstractRoom room)
     {
+        // Compatibility facade for RunManager.EnterRoomInternal(AbstractRoom, bool).
+        // Normal StartRun goes through NGame.StartRun -> RunManager.EnterAct(0); couch mode has already
+        // created NRun and generated the map, so this narrowly enters the initial MapRoom without
+        // triggering another act transition.
         var method = typeof(RunManager).GetMethod(
             "EnterRoomInternal",
             BindingFlags.Instance | BindingFlags.NonPublic);
