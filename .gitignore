@@ -11,3 +11,5 @@ packages/
 .editorconfig
 *.user
 Directory.Build.props
+reference/sts2-decompiled/
+tmp/
