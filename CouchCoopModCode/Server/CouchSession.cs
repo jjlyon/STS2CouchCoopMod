@@ -8,6 +8,7 @@ public sealed class CouchSession
     public string SessionId { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "Player";
     public int? PlayerSlot { get; set; }
+    public string? CharacterId { get; set; }
     public bool IsHost { get; set; }
     public bool IsSpectator { get; set; }
     public WebSocket Socket { get; init; } = null!;

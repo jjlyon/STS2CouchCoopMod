@@ -8,11 +8,22 @@ let lobby = null;
 let lobbyNotice = '';
 let selectedPlayerCount = Number(localStorage.getItem('couch_player_count') || 2);
 let selectedSeed = localStorage.getItem('couch_run_seed') || '';
+let selectedCharacterId = localStorage.getItem('couch_character_id') || 'Ironclad';
 let autoReturnedGameOver = false;
+let renderTimer = null;
+let pendingRender = false;
+let deferRenderUntil = 0;
 const openPanels = new Set();
 
 const COMBAT_TYPES = ['monster', 'elite', 'boss'];
 const TARGET_ENEMY_TYPES = ['anyenemy', 'any_enemy', 'single_enemy'];
+const DEFAULT_CHARACTERS = [
+    { id: 'Ironclad', name: 'Ironclad' },
+    { id: 'Silent', name: 'Silent' },
+    { id: 'Defect', name: 'Defect' },
+    { id: 'Necrobinder', name: 'Necrobinder' },
+    { id: 'Regent', name: 'Regent' }
+];
 
 function connect() {
     ws = new WebSocket(`ws://${location.host}/ws`);
@@ -25,7 +36,7 @@ function connect() {
         if (savedSessionId)
             ws.send(JSON.stringify({ type: 'rejoin', session_id: savedSessionId }));
         else
-            ws.send(JSON.stringify({ type: 'join', name }));
+            ws.send(JSON.stringify({ type: 'join', name, character_id: selectedCharacterId }));
     };
     ws.onclose = () => {
         if (state) {
@@ -44,26 +55,32 @@ function connect() {
             if (message.type === 'session') {
                 session = message;
                 localStorage.setItem('couch_session_id', session.session_id);
-                if (session.name) localStorage.setItem('couch_player_name', session.name);
+                if (session.name && !isEditingElement('player-name'))
+                    localStorage.setItem('couch_player_name', session.name);
+                if (session.character_id) {
+                    selectedCharacterId = session.character_id;
+                    localStorage.setItem('couch_character_id', selectedCharacterId);
+                }
                 lobbyNotice = '';
-                render();
+                scheduleRender();
                 return;
             }
             if (message.type === 'lobby') {
                 lobby = message;
-                render();
+                syncPlayerCountFromLobby();
+                scheduleRender();
                 return;
             }
             if (message.type === 'notice') {
                 lobbyNotice = message.message || '';
                 setConnectionLabel(lobbyNotice);
-                render();
+                scheduleRender();
                 return;
             }
             if (message.type === 'error') {
                 lobbyNotice = message.message || 'Error';
                 setConnectionLabel(message.message || 'Error');
-                render();
+                scheduleRender();
                 return;
             }
 
@@ -74,17 +91,58 @@ function connect() {
             lastStateType = state?.state_type;
             if (state?.state_type !== 'game_over')
                 autoReturnedGameOver = false;
-            render();
+            scheduleRender();
         } catch { /* ignore non-json */ }
     };
 }
 
 function send(action) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    deferRenderUntil = Math.max(deferRenderUntil, Date.now() + 350);
     if (action.type)
         ws.send(JSON.stringify(action));
     else
         ws.send(JSON.stringify({ type: 'action', ...action }));
+}
+
+document.addEventListener('pointerdown', () => {
+    deferRenderUntil = Math.max(deferRenderUntil, Date.now() + 350);
+}, true);
+
+function scheduleRender() {
+    pendingRender = true;
+    if (renderTimer !== null) return;
+    renderTimer = setTimeout(flushScheduledRender, 60);
+}
+
+function flushScheduledRender() {
+    renderTimer = null;
+    if (!pendingRender) return;
+
+    const now = Date.now();
+    if (shouldDeferRender(now)) {
+        const waitMs = Math.max(80, Math.min(250, deferRenderUntil - now + 20));
+        renderTimer = setTimeout(flushScheduledRender, waitMs);
+        return;
+    }
+
+    pendingRender = false;
+    render();
+}
+
+function shouldDeferRender(now) {
+    if (now < deferRenderUntil) return true;
+    const active = document.activeElement;
+    return active?.matches?.('input, textarea, select');
+}
+
+function isEditingElement(id) {
+    return document.activeElement?.id === id;
+}
+
+function inputValueOr(id, fallback) {
+    const input = document.getElementById(id);
+    return input ? input.value : fallback;
 }
 
 function setConnectionLabel(text) {
@@ -171,6 +229,8 @@ function render() {
         renderBundleSelect();
     else if (state.state_type === 'relic_select')
         renderRelicSelect();
+    else if (state.state_type === 'player_select')
+        renderPlayerSelect();
     else if (state.state_type === 'crystal_sphere')
         renderCrystalSphere();
     else if (state.state_type === 'treasure')
@@ -200,11 +260,18 @@ function renderCouchLobby() {
     renderStatusBar();
     const slots = getVisibleLobbySlots();
     const currentSlot = session?.player_slot;
-    const playerName = session?.name || localStorage.getItem('couch_player_name') || defaultPlayerName();
+    const savedPlayerName = session?.name || localStorage.getItem('couch_player_name') || defaultPlayerName();
+    const playerName = inputValueOr('player-name', savedPlayerName);
+    selectedSeed = inputValueOr('run-seed', selectedSeed).slice(0, 32);
     const hasSlot = currentSlot !== null && currentSlot !== undefined;
     const slotLabel = hasSlot ? `Player ${Number(currentSlot) + 1}${session?.is_host ? ' / Host' : ''}` : 'No slot';
     const canStart = slots.filter(s => s.claimed).length > 0 || hasSlot;
     const isHost = session?.is_host === true || lobby?.host_session_id === session?.session_id;
+    const characters = getLobbyCharacters();
+    const selectedCharacter = characters.find(c => c.id === selectedCharacterId && !c.locked)
+        || characters.find(c => !c.locked)
+        || characters[0];
+    selectedCharacterId = selectedCharacter?.id || selectedCharacterId;
     document.getElementById('content').innerHTML = `
         <section class="couch-lobby">
             <div class="screen-title">Couch Co-op Lobby</div>
@@ -216,10 +283,20 @@ function renderCouchLobby() {
                 </div>
                 <div class="lobby-status">
                     <span>${escapeHtml(slotLabel)}</span>
-                    ${state?.state_type ? `<span>${escapeHtml(titleCase(state.state_type))}</span>` : ''}
+                    <span>${escapeHtml(selectedCharacter?.name || selectedCharacterId)}</span>
                 </div>
             </div>
             ${lobbyNotice ? `<div class="notice">${escapeHtml(lobbyNotice)}</div>` : ''}
+            <div class="character-pick-row" role="group" aria-label="Character">
+                ${characters.map(c => `
+                    <button class="character-pick ${selectedCharacterId === c.id ? 'active' : ''} ${c.locked ? 'locked' : ''}"
+                        ${c.locked ? 'disabled' : ''}
+                        onclick="selectLobbyCharacter('${attr(c.id)}')">
+                        <strong>${escapeHtml(c.name || c.id)}</strong>
+                        <span>${escapeHtml(characterSubtitle(c))}</span>
+                    </button>
+                `).join('')}
+            </div>
             <div class="player-count-row" role="group" aria-label="Player count">
                 ${[2, 3, 4].map(count => `
                     <button class="seg-btn ${selectedPlayerCount === count ? 'active' : ''}" ${isHost ? '' : 'disabled'} onclick="setPlayerCount(${count})">${count}P</button>
@@ -238,6 +315,7 @@ function renderCouchLobby() {
                         onclick="claimSlot(${Number(s.slot)})">
                         <strong>Player ${Number(s.slot) + 1}</strong>
                         <span>${slotSubtitle(s, hasSlot, currentSlot)}</span>
+                        ${s.character_id ? `<em>${escapeHtml(characterName(s.character_id))}</em>` : ''}
                     </button>
                 `).join('')}
             </div>
@@ -247,7 +325,7 @@ function renderCouchLobby() {
                     ${lobby.players.map(p => `
                         <div class="phone-row">
                             <span>${escapeHtml(p.name || 'Player')}</span>
-                            <span>${escapeHtml(phoneRoleLabel(p))}</span>
+                            <span>${escapeHtml(phoneRoleLabel(p))}${p.character_id ? ` / ${escapeHtml(characterName(p.character_id))}` : ''}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -260,14 +338,53 @@ function renderCouchLobby() {
 function getVisibleLobbySlots() {
     const known = lobby?.slots || [];
     const bySlot = new Map(known.map(s => [Number(s.slot), s]));
-    const count = Math.max(2, Math.min(4, selectedPlayerCount || 2));
+    const count = normalizedPlayerCount(lobby?.player_count ?? selectedPlayerCount);
     return Array.from({ length: count }, (_, slot) => bySlot.get(slot) || { slot, claimed: false });
+}
+
+function normalizedPlayerCount(count) {
+    return Math.max(2, Math.min(4, Number(count) || 2));
+}
+
+function syncPlayerCountFromLobby() {
+    if (lobby?.couch_initialized !== true) return;
+
+    const lobbyPlayerCount = normalizedPlayerCount(lobby?.player_count);
+    if (selectedPlayerCount === lobbyPlayerCount) return;
+
+    selectedPlayerCount = lobbyPlayerCount;
+    localStorage.setItem('couch_player_count', String(selectedPlayerCount));
 }
 
 function slotSubtitle(slot, hasSlot, currentSlot) {
     if (hasSlot && Number(currentSlot) === Number(slot.slot)) return 'Claimed by you';
     if (slot.claimed) return escapeHtml(slot.name || 'Claimed');
     return 'Open';
+}
+
+function getLobbyCharacters() {
+    const byId = new Map(DEFAULT_CHARACTERS.map(c => [c.id, c]));
+    for (const character of state?.characters || []) {
+        if (!character?.id) continue;
+        byId.set(character.id, {
+            ...byId.get(character.id),
+            ...character,
+            name: character.name || byId.get(character.id)?.name || character.id
+        });
+    }
+    return [...byId.values()];
+}
+
+function characterName(characterId) {
+    return getLobbyCharacters().find(c => c.id === characterId)?.name || titleCase(characterId);
+}
+
+function characterSubtitle(character) {
+    if (character.locked) return 'Locked';
+    const parts = [];
+    if (character.hp !== undefined) parts.push(`${character.hp} HP`);
+    if (character.energy !== undefined) parts.push(`${character.energy} energy`);
+    return parts.join(' / ') || 'Ready';
 }
 
 function phoneRoleLabel(player) {
@@ -280,12 +397,23 @@ function savePlayerName() {
     const input = document.getElementById('player-name');
     const name = (input?.value || defaultPlayerName()).trim().slice(0, 24) || defaultPlayerName();
     localStorage.setItem('couch_player_name', name);
-    send({ type: 'join', name });
+    send({ type: 'join', name, character_id: selectedCharacterId });
+}
+
+function selectLobbyCharacter(characterId) {
+    selectedCharacterId = characterId;
+    localStorage.setItem('couch_character_id', selectedCharacterId);
+    send({ type: 'join', name: localStorage.getItem('couch_player_name') || defaultPlayerName(), character_id: selectedCharacterId });
+    if (session?.player_slot !== null && session?.player_slot !== undefined)
+        send({ type: 'claim_slot', slot: Number(session.player_slot), character_id: selectedCharacterId });
+    renderCouchLobby();
 }
 
 function setPlayerCount(count) {
-    selectedPlayerCount = count;
-    localStorage.setItem('couch_player_count', String(count));
+    selectedPlayerCount = normalizedPlayerCount(count);
+    localStorage.setItem('couch_player_count', String(selectedPlayerCount));
+    if (session?.is_host === true && lobby?.couch_initialized === true)
+        send({ type: 'init_couch', player_count: selectedPlayerCount });
     renderCouchLobby();
 }
 
@@ -307,13 +435,14 @@ function initCouchSession() {
 
 function claimSlot(slot) {
     savePlayerName();
-    send({ type: 'claim_slot', slot });
+    send({ type: 'claim_slot', slot, character_id: selectedCharacterId });
 }
 
 function startCouchRun() {
     savePlayerName();
     const seed = saveRunSeed();
     const message = { type: 'start_couch', player_count: selectedPlayerCount };
+    message.characters = getVisibleLobbySlots().map(s => s.character_id || (session?.player_slot === s.slot ? selectedCharacterId : ''));
     if (seed)
         message.seed = seed;
     send(message);
@@ -753,7 +882,9 @@ function renderRestSite() {
             `).join('')}
         </div>
     `);
-    setActionBar(rest.can_proceed ? `<button class="btn" onclick="send({action:'proceed'})">Proceed</button>` : '');
+    setActionBar(rest.can_proceed
+        ? `<button class="btn" ${rest.waiting_for_all_players ? 'disabled' : ''} onclick="send({action:'proceed'})">Proceed</button>`
+        : '');
 }
 
 // --- Rewards ---
@@ -764,11 +895,12 @@ function renderRewards() {
 
     setMainContent(`
         <div class="screen-title">Rewards</div>
+        ${rewardsState.message ? `<div class="notice">${escapeHtml(rewardsState.message)}</div>` : ''}
         <div class="choices">
             ${rewards.map((r, i) => `
-                <button class="btn choice" onclick="send({action:'claim_reward',index:${Number(r.index ?? i)}})">
+                <button class="btn choice" ${rewardsState.is_resolving ? 'disabled' : ''} onclick="send({action:'claim_reward',index:${Number(r.index ?? i)}})">
                     <span>${escapeHtml(rewardLabel(r))}</span>
-                    ${r.description ? `<span class="choice-desc">${escapeHtml(r.description)}</span>` : ''}
+                    ${rewardDescription(r) ? `<span class="choice-desc">${escapeHtml(rewardDescription(r))}</span>` : ''}
                 </button>
             `).join('')}
         </div>
@@ -779,7 +911,13 @@ function renderRewards() {
 function rewardLabel(r) {
     if (r.gold_amount) return `Gold: ${r.gold_amount}`;
     if (r.potion_name) return `Potion: ${r.potion_name}`;
-    return `${titleCase(r.type)} ${r.name || ''}`.trim();
+    if (r.relic_name) return `Relic: ${r.relic_name}`;
+    if (r.card_name) return `Card: ${r.card_name}`;
+    return `${titleCase(r.type)} ${r.name || r.description || ''}`.trim();
+}
+
+function rewardDescription(r) {
+    return r.relic_description || r.potion_description || r.card_description || r.description || '';
 }
 
 // --- Card Reward ---
@@ -971,6 +1109,24 @@ function renderRelicSelect() {
         </div>
     `);
     setActionBar(rs.can_skip ? `<button class="btn cancel" onclick="send({action:'skip_relic_selection'})">Skip</button>` : '');
+}
+
+function renderPlayerSelect() {
+    const ps = state.player_select || {};
+    const players = ps.players || [];
+
+    setMainContent(`
+        <div class="screen-title">${escapeHtml(ps.prompt || 'Choose a player')}</div>
+        <div class="choices">
+            ${players.map((p, i) => `
+                <button class="btn choice" onclick="send({action:'select_player',index:${Number(p.index ?? i)}})">
+                    <span>${escapeHtml(p.character || `Player ${Number(p.index ?? i) + 1}`)}</span>
+                    <span class="choice-desc">${escapeHtml(`${p.hp ?? '?'}/${p.max_hp ?? '?'} HP`)}</span>
+                </button>
+            `).join('')}
+        </div>
+    `);
+    setActionBar(ps.can_skip ? `<button class="btn cancel" onclick="send({action:'cancel_selection'})">Skip</button>` : '');
 }
 
 function renderTreasure() {

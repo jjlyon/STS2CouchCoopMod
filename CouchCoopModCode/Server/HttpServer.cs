@@ -66,6 +66,7 @@ public class HttpServer
 
         await Task.Delay(150);
         await BroadcastPersonalStatesAsync();
+        _ = BroadcastPersonalStateFollowupsAsync();
     }
 
     private async Task SendInitialState(CouchSession session)
@@ -183,6 +184,22 @@ public class HttpServer
         }
     }
 
+    private async Task BroadcastPersonalStateFollowupsAsync()
+    {
+        try
+        {
+            foreach (var delay in new[] { 500, 1000, 2000 })
+            {
+                await Task.Delay(delay);
+                await BroadcastPersonalStatesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Warn($"Follow-up state broadcast failed: {ex.Message}", 0);
+        }
+    }
+
     private async Task BroadcastLobbyAsync()
     {
         foreach (var session in _wsHandler.Sessions)
@@ -197,6 +214,7 @@ public class HttpServer
                 session_id = s.SessionId,
                 name = s.Name,
                 player_slot = s.PlayerSlot,
+                character_id = s.CharacterId,
                 is_host = s.IsHost,
                 role = s.IsSpectator ? "spectator" : "player"
             })
@@ -213,7 +231,8 @@ public class HttpServer
             {
                 slot,
                 claimed = sessions.Any(s => s.player_slot == slot),
-                name = sessions.FirstOrDefault(s => s.player_slot == slot)?.name
+                name = sessions.FirstOrDefault(s => s.player_slot == slot)?.name,
+                character_id = sessions.FirstOrDefault(s => s.player_slot == slot)?.character_id
             })
         });
         await _wsHandler.SendAsync(session, payload);
@@ -233,6 +252,7 @@ public class HttpServer
                 ["state_type"] = stateType,
                 ["session_id"] = session.SessionId,
                 ["player_slot"] = session.PlayerSlot,
+                ["character_id"] = session.CharacterId,
                 ["role"] = session.IsSpectator ? "spectator" : "player",
                 ["state"] = JsonSerializer.Deserialize<object?>(rawState)
             };
@@ -301,6 +321,12 @@ public class HttpServer
                     message = resetResult.TryGetValue("message", out var resetMessage) ? resetMessage?.ToString() : resetResult.GetValueOrDefault("error")?.ToString(),
                     result = resetResult
                 }));
+                if (resetResult.TryGetValue("status", out var resetStatusValue)
+                    && resetStatusValue?.ToString() == "ok")
+                {
+                    ResetCouchLobbyState();
+                    await SendSessionAsync(session);
+                }
                 await BroadcastLobbyAsync();
                 await BroadcastPersonalStatesAsync();
                 return true;
@@ -324,6 +350,8 @@ public class HttpServer
             await SendSessionAsync(session);
 
             var characters = ReadCharacterIds(doc.RootElement);
+            if (characters.Count == 0)
+                characters = ReadSessionCharacterIds(playerCount);
             var seed = ReadOptionalString(doc.RootElement, "seed");
 
             var result = CouchRunBootstrapper.Instance == null
@@ -360,6 +388,23 @@ public class HttpServer
         session.IsHost = true;
         session.IsSpectator = false;
         session.PlayerSlot = 0;
+        session.CharacterId ??= "Ironclad";
+    }
+
+    private void ResetCouchLobbyState()
+    {
+        _couchSessionInitialized = false;
+        _hostSessionId = null;
+        _couchPlayerCount = 2;
+        _wsHandler.ClearKnownSessionAssignments();
+
+        foreach (var connectedSession in _wsHandler.Sessions)
+        {
+            connectedSession.IsHost = false;
+            connectedSession.IsSpectator = false;
+            connectedSession.PlayerSlot = null;
+            connectedSession.CharacterId = null;
+        }
     }
 
     private bool EnsureHostAccess(CouchSession session)
@@ -370,6 +415,7 @@ public class HttpServer
             session.IsHost = true;
             session.IsSpectator = false;
             session.PlayerSlot ??= 0;
+            session.CharacterId ??= "Ironclad";
             return true;
         }
 
@@ -381,6 +427,7 @@ public class HttpServer
         session.IsHost = true;
         session.IsSpectator = false;
         session.PlayerSlot ??= 0;
+        session.CharacterId ??= "Ironclad";
         return true;
     }
 
@@ -391,6 +438,7 @@ public class HttpServer
             type = "session",
             session_id = session.SessionId,
             player_slot = session.PlayerSlot,
+            character_id = session.CharacterId,
             is_host = session.IsHost,
             role = session.IsSpectator ? "spectator" : "player",
             name = session.Name
@@ -408,6 +456,20 @@ public class HttpServer
             if (character.ValueKind == JsonValueKind.String)
                 result.Add(character.GetString() ?? "");
         }
+
+        return result;
+    }
+
+    private List<string> ReadSessionCharacterIds(int playerCount)
+    {
+        var bySlot = _wsHandler.Sessions
+            .Where(s => s.PlayerSlot.HasValue && !s.IsSpectator)
+            .GroupBy(s => s.PlayerSlot!.Value)
+            .ToDictionary(g => g.Key, g => g.First().CharacterId ?? "");
+
+        var result = new List<string>();
+        for (var slot = 0; slot < playerCount; slot++)
+            result.Add(bySlot.GetValueOrDefault(slot) ?? "");
 
         return result;
     }

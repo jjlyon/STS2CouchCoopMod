@@ -29,6 +29,17 @@ public class WebSocketHandler
     public int ClientCount => _clients.Count;
     public IEnumerable<CouchSession> Sessions => _sessions.Values.ToArray();
 
+    public void ClearKnownSessionAssignments()
+    {
+        foreach (var session in _knownSessions.Values)
+        {
+            session.IsHost = false;
+            session.IsSpectator = false;
+            session.PlayerSlot = null;
+            session.CharacterId = null;
+        }
+    }
+
     public async Task AcceptConnection(HttpListenerContext context, CancellationToken ct)
     {
         var wsContext = await context.AcceptWebSocketAsync(null);
@@ -179,6 +190,7 @@ public class WebSocketHandler
         {
             case "join":
                 session.Name = ReadString(doc.RootElement, "name") ?? session.Name;
+                session.CharacterId = NormalizeCharacterId(ReadString(doc.RootElement, "character_id")) ?? session.CharacterId;
                 _knownSessions[session.SessionId] = session;
                 await SendSessionAsync(session);
                 if (_onSessionChanged != null) await _onSessionChanged();
@@ -197,6 +209,7 @@ public class WebSocketHandler
                     }
 
                     session.PlayerSlot = slot;
+                    session.CharacterId = NormalizeCharacterId(ReadString(doc.RootElement, "character_id")) ?? session.CharacterId;
                     session.IsSpectator = false;
                     _knownSessions[session.SessionId] = session;
                     await SendSessionAsync(session);
@@ -211,6 +224,7 @@ public class WebSocketHandler
                     session.SessionId = existing.SessionId;
                     session.Name = existing.Name;
                     session.PlayerSlot = existing.PlayerSlot;
+                    session.CharacterId = existing.CharacterId;
                     session.IsHost = existing.IsHost;
                     session.IsSpectator = existing.IsSpectator;
                     _sessions[session.SessionId] = session;
@@ -247,6 +261,7 @@ public class WebSocketHandler
             type = "session",
             session_id = session.SessionId,
             player_slot = session.PlayerSlot,
+            character_id = session.CharacterId,
             is_host = session.IsHost,
             role = session.IsSpectator ? "spectator" : "player",
             name = session.Name
@@ -257,6 +272,15 @@ public class WebSocketHandler
     private static string? ReadString(JsonElement element, string name)
     {
         return element.TryGetProperty(name, out var value) ? value.GetString() : null;
+    }
+
+    private static string? NormalizeCharacterId(string? characterId)
+    {
+        var trimmed = characterId?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        return trimmed[..Math.Min(trimmed.Length, 64)];
     }
 
     private static string StripMessageType(JsonElement element)

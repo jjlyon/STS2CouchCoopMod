@@ -560,6 +560,46 @@ body {
     gap: 0.4rem;
 }
 
+.character-pick-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.character-pick {
+    min-height: 68px;
+    border: 1px solid #303050;
+    border-radius: 8px;
+    background: #18182a;
+    color: #ddd;
+    padding: 0.55rem;
+    text-align: left;
+}
+
+.character-pick strong,
+.character-pick span {
+    display: block;
+}
+
+.character-pick strong {
+    font-size: 0.86rem;
+}
+
+.character-pick span {
+    color: #aaa;
+    font-size: 0.72rem;
+    margin-top: 0.2rem;
+}
+
+.character-pick.active {
+    border-color: #4ecdc4;
+    background: #123235;
+}
+
+.character-pick.locked {
+    opacity: 0.5;
+}
+
 .seg-btn {
     background: #1e1e3a;
     border: 1px solid #303050;
@@ -609,6 +649,12 @@ body {
 .slot-card span {
     color: #a8c9d8;
     font-size: 0.8rem;
+}
+
+.slot-card em {
+    color: #f5c542;
+    font-size: 0.75rem;
+    font-style: normal;
 }
 
 .slot-card.claimed {
